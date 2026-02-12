@@ -7,12 +7,12 @@ A command-line tool to manage tickets, built with **Hexagonal Architecture** (Po
 This project demonstrates the application of Hexagonal Architecture principles to build a maintainable and testable CLI application. Tickets are stored locally in JSON files.
 
 ### Features
-- ✅ Create tickets with title, description, priority, and tags
-- ✅ List tickets with filters (status, priority, tags)
-- ✅ Show detailed ticket information
-- ✅ Update ticket status
-- ✅ Add/remove tags from tickets
-- ✅ Delete tickets
+- Create tickets with title, description, priority, and tags
+- List tickets with filters (status, priority, tags)
+- Show detailed ticket information
+- Update ticket status
+- Add/remove tags from tickets
+- Delete tickets
 
 ## 🏗️ Architecture
 
@@ -348,4 +348,4 @@ MIT
 
 ## 👤 Author
 
-[Your Name]
+Le Thanh Cong
