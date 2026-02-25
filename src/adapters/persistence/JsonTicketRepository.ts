@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Ticket, TicketProps } from '../../domain/entities/Ticket';
 import { ITicketRepository, TicketFilter } from '../../ports/secondary/ITicketRepository';
+import { TicketNotFoundError } from '../../domain/exceptions/TicketNotFoundError';
 
 export class JsonTicketRepository implements ITicketRepository {
   private readonly filePath: string;
@@ -23,8 +24,13 @@ export class JsonTicketRepository implements ITicketRepository {
   private async readTickets(): Promise<Ticket[]> {
     await this.ensureFileExists();
     const data = await fs.readFile(this.filePath, 'utf-8');
-    const ticketsData: TicketProps[] = JSON.parse(data);
-    return ticketsData.map(ticketData => Ticket.fromJSON(ticketData));
+    
+    try {
+      const ticketsData: TicketProps[] = JSON.parse(data);
+      return ticketsData.map(ticketData => Ticket.fromJSON(ticketData));
+    } catch (error) {
+      throw new Error(`Failed to parse tickets file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   private async writeTickets(tickets: Ticket[]): Promise<void> {
@@ -73,7 +79,7 @@ export class JsonTicketRepository implements ITicketRepository {
     const index = tickets.findIndex(t => t.id === ticket.id);
     
     if (index === -1) {
-      throw new Error(`Ticket with id ${ticket.id} not found`);
+      throw new TicketNotFoundError(ticket.id);
     }
 
     tickets[index] = ticket;
@@ -85,7 +91,7 @@ export class JsonTicketRepository implements ITicketRepository {
     const filteredTickets = tickets.filter(t => t.id !== id);
     
     if (tickets.length === filteredTickets.length) {
-      throw new Error(`Ticket with id ${id} not found`);
+      throw new TicketNotFoundError(id);
     }
 
     await this.writeTickets(filteredTickets);

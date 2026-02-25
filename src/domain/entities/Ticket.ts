@@ -1,3 +1,5 @@
+import { InvalidTicketError } from '../exceptions/InvalidTicketError';
+
 export enum TicketStatus {
   OPEN = 'OPEN',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -33,27 +35,37 @@ export class Ticket {
 
   private validate(props: TicketProps): void {
     if (!props.title || props.title.trim().length === 0) {
-      throw new Error('Title cannot be empty');
+      throw new InvalidTicketError('Title cannot be empty');
     }
 
     if (props.title.length > 200) {
-      throw new Error('Title cannot exceed 200 characters');
+      throw new InvalidTicketError('Title cannot exceed 200 characters');
     }
 
     if (!props.description || props.description.trim().length === 0) {
-      throw new Error('Description cannot be empty');
+      throw new InvalidTicketError('Description cannot be empty');
+    }
+
+    if (props.description.length > 5000) {
+      throw new InvalidTicketError('Description cannot exceed 5000 characters');
     }
 
     if (!Object.values(TicketStatus).includes(props.status)) {
-      throw new Error(`Invalid status: ${props.status}`);
+      throw new InvalidTicketError(`Invalid status: ${props.status}`);
     }
 
     if (!Object.values(TicketPriority).includes(props.priority)) {
-      throw new Error(`Invalid priority: ${props.priority}`);
+      throw new InvalidTicketError(`Invalid priority: ${props.priority}`);
     }
 
     if (!Array.isArray(props.tags)) {
-      throw new Error('Tags must be an array');
+      throw new InvalidTicketError('Tags must be an array');
+    }
+
+    for (const tag of props.tags) {
+      if (!/^[a-z0-9-]+$/.test(tag)) {
+        throw new InvalidTicketError(`Invalid tag format: ${tag}`);
+      }
     }
   }
 
@@ -93,7 +105,7 @@ export class Ticket {
   // Business methods
   updateStatus(newStatus: TicketStatus): void {
     if (!Object.values(TicketStatus).includes(newStatus)) {
-      throw new Error(`Invalid status: ${newStatus}`);
+      throw new InvalidTicketError(`Invalid status: ${newStatus}`);
     }
     this.props.status = newStatus;
     this.props.updatedAt = new Date();
@@ -101,7 +113,10 @@ export class Ticket {
 
   addTag(tag: string): void {
     if (!tag || tag.trim().length === 0) {
-      throw new Error('Tag cannot be empty');
+      throw new InvalidTicketError('Tag cannot be empty');
+    }
+    if (!/^[a-z0-9-]+$/.test(tag)) {
+      throw new InvalidTicketError(`Invalid tag format: ${tag}`);
     }
     if (!this.props.tags.includes(tag)) {
       this.props.tags.push(tag);

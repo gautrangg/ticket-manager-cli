@@ -1,6 +1,8 @@
 import { TicketService } from '../../src/domain/services/TicketService';
 import { Ticket, TicketStatus, TicketPriority } from '../../src/domain/entities/Ticket';
 import { ITicketRepository } from '../../src/ports/secondary/ITicketRepository';
+import { IIdGenerator } from '../../src/ports/secondary/IIdGenerator';
+import { TicketNotFoundError } from '../../src/domain/exceptions/TicketNotFoundError';
 
 // Mock Repository
 class MockTicketRepository implements ITicketRepository {
@@ -20,7 +22,7 @@ class MockTicketRepository implements ITicketRepository {
 
   async update(ticket: Ticket): Promise<void> {
     if (!this.tickets.has(ticket.id)) {
-      throw new Error(`Ticket with id ${ticket.id} not found`);
+      throw new TicketNotFoundError(ticket.id);
     }
     this.tickets.set(ticket.id, ticket);
   }
@@ -35,17 +37,33 @@ class MockTicketRepository implements ITicketRepository {
   }
 }
 
+// Mock ID Generator
+class MockIdGenerator implements IIdGenerator {
+  private counter = 0;
+
+  generate(): string {
+    return `test-id-${++this.counter}`;
+  }
+
+  reset(): void {
+    this.counter = 0;
+  }
+}
+
 describe('TicketService', () => {
   let service: TicketService;
   let mockRepository: MockTicketRepository;
+  let mockIdGenerator: MockIdGenerator;
 
   beforeEach(() => {
     mockRepository = new MockTicketRepository();
-    service = new TicketService(mockRepository);
+    mockIdGenerator = new MockIdGenerator();
+    service = new TicketService(mockRepository, mockIdGenerator);
   });
 
   afterEach(() => {
     mockRepository.clear();
+    mockIdGenerator.reset();
   });
 
   describe('createTicket', () => {
@@ -108,10 +126,10 @@ describe('TicketService', () => {
       expect(found.title).toBe(created.title);
     });
 
-    it('should throw error when ticket not found', async () => {
+    it('should throw TicketNotFoundError when ticket not found', async () => {
       await expect(service.getTicketById('non-existent'))
         .rejects
-        .toThrow('Ticket with id non-existent not found');
+        .toThrow(TicketNotFoundError);
     });
   });
 
@@ -158,7 +176,7 @@ describe('TicketService', () => {
     it('should throw error when updating non-existent ticket', async () => {
       await expect(service.updateTicketStatus('non-existent', TicketStatus.CLOSED))
         .rejects
-        .toThrow('Ticket with id non-existent not found');
+        .toThrow(TicketNotFoundError);
     });
 
     it('should persist status update to repository', async () => {
@@ -192,7 +210,7 @@ describe('TicketService', () => {
     it('should throw error when adding tag to non-existent ticket', async () => {
       await expect(service.addTagToTicket('non-existent', 'tag'))
         .rejects
-        .toThrow('Ticket with id non-existent not found');
+        .toThrow(TicketNotFoundError);
     });
   });
 
@@ -229,7 +247,7 @@ describe('TicketService', () => {
     it('should throw error when deleting non-existent ticket', async () => {
       await expect(service.deleteTicket('non-existent'))
         .rejects
-        .toThrow('Ticket with id non-existent not found');
+        .toThrow(TicketNotFoundError);
     });
   });
 });

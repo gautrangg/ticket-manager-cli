@@ -1,20 +1,18 @@
-import { v4 as uuidv4 } from 'uuid';
 import { Ticket, TicketStatus, TicketPriority } from '../entities/Ticket';
 import { ITicketRepository, TicketFilter } from '../../ports/secondary/ITicketRepository';
+import { IIdGenerator } from '../../ports/secondary/IIdGenerator';
+import { TicketNotFoundError } from '../exceptions/TicketNotFoundError';
+import { ITicketUseCases, CreateTicketDTO } from '../../ports/primary/ITicketUseCases';
 
-export interface CreateTicketDTO {
-  title: string;
-  description: string;
-  priority: TicketPriority;
-  tags?: string[];
-}
-
-export class TicketService {
-  constructor(private readonly repository: ITicketRepository) {}
+export class TicketService implements ITicketUseCases {
+  constructor(
+    private readonly repository: ITicketRepository,
+    private readonly idGenerator: IIdGenerator
+  ) {}
 
   async createTicket(dto: CreateTicketDTO): Promise<Ticket> {
     const ticket = new Ticket({
-      id: uuidv4(),
+      id: this.idGenerator.generate(),
       title: dto.title,
       description: dto.description,
       status: TicketStatus.OPEN,
@@ -31,7 +29,7 @@ export class TicketService {
   async getTicketById(id: string): Promise<Ticket> {
     const ticket = await this.repository.findById(id);
     if (!ticket) {
-      throw new Error(`Ticket with id ${id} not found`);
+      throw new TicketNotFoundError(id);
     }
     return ticket;
   }

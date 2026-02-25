@@ -1,13 +1,53 @@
 import { Command } from 'commander';
-import { TicketService } from '../../domain/services/TicketService';
+import { ITicketUseCases } from '../../ports/primary/ITicketUseCases';
 import { TicketStatus, TicketPriority } from '../../domain/entities/Ticket';
+import { TicketNotFoundError } from '../../domain/exceptions/TicketNotFoundError';
+import { InvalidTicketError } from '../../domain/exceptions/InvalidTicketError';
+import { DomainError } from '../../domain/exceptions/DomainError';
+
+const EXIT_CODES = {
+  SUCCESS: 0,
+  VALIDATION_ERROR: 1,
+  NOT_FOUND: 2,
+  SYSTEM_ERROR: 3
+};
 
 export class TicketCLI {
   private program: Command;
 
-  constructor(private ticketService: TicketService) {
+  constructor(private useCases: ITicketUseCases) {
     this.program = new Command();
     this.setupCommands();
+  }
+
+  private validateEnum<T>(
+    value: string,
+    enumType: object,
+    fieldName: string
+  ): string {
+    const upper = value.toUpperCase();
+    if (!Object.values(enumType).includes(upper)) {
+      console.error(`Invalid ${fieldName}: ${value}`);
+      console.error(`Valid options: ${Object.values(enumType).join(', ')}`);
+      process.exit(EXIT_CODES.VALIDATION_ERROR);
+    }
+    return upper;
+  }
+
+  private handleError(error: unknown): void {
+    if (error instanceof TicketNotFoundError) {
+      console.error('❌ Error:', error.message);
+      process.exit(EXIT_CODES.NOT_FOUND);
+    } else if (error instanceof InvalidTicketError || error instanceof DomainError) {
+      console.error('❌ Error:', error.message);
+      process.exit(EXIT_CODES.VALIDATION_ERROR);
+    } else if (error instanceof Error) {
+      console.error('❌ Error:', error.message);
+      process.exit(EXIT_CODES.SYSTEM_ERROR);
+    } else {
+      console.error('❌ Unknown error occurred');
+      process.exit(EXIT_CODES.SYSTEM_ERROR);
+    }
   }
 
   private setupCommands(): void {
@@ -26,19 +66,17 @@ export class TicketCLI {
       .option('--tags <tags>', 'Comma-separated tags', '')
       .action(async (options) => {
         try {
-          const priority = options.priority.toUpperCase() as TicketPriority;
-          
-          if (!Object.values(TicketPriority).includes(priority)) {
-            console.error(`Invalid priority: ${options.priority}`);
-            console.error(`Valid options: ${Object.values(TicketPriority).join(', ')}`);
-            process.exit(1);
-          }
+          const priority = this.validateEnum(
+            options.priority,
+            TicketPriority,
+            'priority'
+          ) as TicketPriority;
 
           const tags = options.tags
             ? options.tags.split(',').map((t: string) => t.trim()).filter(Boolean)
             : [];
 
-          const ticket = await this.ticketService.createTicket({
+          const ticket = await this.useCases.createTicket({
             title: options.title,
             description: options.description,
             priority,
@@ -54,8 +92,7 @@ export class TicketCLI {
             console.log(`Tags: ${tags.join(', ')}`);
           }
         } catch (error) {
-          console.error('❌ Error:', (error as Error).message);
-          process.exit(1);
+          this.handleError(error);
         }
       });
 
@@ -68,31 +105,33 @@ export class TicketCLI {
       .option('-t, --tags <tags>', 'Filter by tags (comma-separated)')
       .action(async (options) => {
         try {
-          const filter: any = {};
+          const filter: {
+            status?: TicketStatus;
+            priority?: TicketPriority;
+            tags?: string[];
+          } = {};
 
           if (options.status) {
-            const status = options.status.toUpperCase() as TicketStatus;
-            if (!Object.values(TicketStatus).includes(status)) {
-              console.error(`Invalid status: ${options.status}`);
-              process.exit(1);
-            }
-            filter.status = status;
+            filter.status = this.validateEnum(
+              options.status,
+              TicketStatus,
+              'status'
+            ) as TicketStatus;
           }
 
           if (options.priority) {
-            const priority = options.priority.toUpperCase() as TicketPriority;
-            if (!Object.values(TicketPriority).includes(priority)) {
-              console.error(`Invalid priority: ${options.priority}`);
-              process.exit(1);
-            }
-            filter.priority = priority;
+            filter.priority = this.validateEnum(
+              options.priority,
+              TicketPriority,
+              'priority'
+            ) as TicketPriority;
           }
 
           if (options.tags) {
             filter.tags = options.tags.split(',').map((t: string) => t.trim());
           }
 
-          const tickets = await this.ticketService.listTickets(filter);
+          const tickets = await this.useCases.listTickets(filter);
 
           if (tickets.length === 0) {
             console.log('\nNo tickets found.');
@@ -113,8 +152,7 @@ export class TicketCLI {
             console.log('');
           });
         } catch (error) {
-          console.error('❌ Error:', (error as Error).message);
-          process.exit(1);
+          this.handleError(error);
         }
       });
 
@@ -124,7 +162,7 @@ export class TicketCLI {
       .description('Show ticket details')
       .action(async (id: string) => {
         try {
-          const ticket = await this.ticketService.getTicketById(id);
+          const ticket = await this.useCases.getTicketById(id);
 
           console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
           console.log(`ID:          ${ticket.id}`);
@@ -139,8 +177,7 @@ export class TicketCLI {
           console.log(`Updated:     ${ticket.updatedAt.toLocaleString()}`);
           console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         } catch (error) {
-          console.error('❌ Error:', (error as Error).message);
-          process.exit(1);
+          this.handleError(error);
         }
       });
 
@@ -151,23 +188,20 @@ export class TicketCLI {
       .requiredOption('-s, --status <status>', 'New status (OPEN, IN_PROGRESS, RESOLVED, CLOSED)')
       .action(async (id: string, options) => {
         try {
-          const status = options.status.toUpperCase() as TicketStatus;
-          
-          if (!Object.values(TicketStatus).includes(status)) {
-            console.error(`Invalid status: ${options.status}`);
-            console.error(`Valid options: ${Object.values(TicketStatus).join(', ')}`);
-            process.exit(1);
-          }
+          const status = this.validateEnum(
+            options.status,
+            TicketStatus,
+            'status'
+          ) as TicketStatus;
 
-          const ticket = await this.ticketService.updateTicketStatus(id, status);
+          const ticket = await this.useCases.updateTicketStatus(id, status);
 
           console.log('\n✅ Ticket updated successfully!');
           console.log(`ID: ${ticket.id}`);
           console.log(`Title: ${ticket.title}`);
           console.log(`Status: ${ticket.status}`);
         } catch (error) {
-          console.error('❌ Error:', (error as Error).message);
-          process.exit(1);
+          this.handleError(error);
         }
       });
   }
